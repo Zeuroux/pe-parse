@@ -25,12 +25,42 @@ THE SOFTWARE.
 #include <codecvt>
 #include <locale>
 #include <pe-parse/to_string.h>
+#include <cstdint>
 
 namespace peparse {
 // See
 // https://stackoverflow.com/questions/38688417/utf-conversion-functions-in-c11
 std::string from_utf16(const UCharString &u) {
-  std::wstring_convert<std::codecvt_utf8<char16_t>, char16_t> convert;
-  return convert.to_bytes(u);
+    std::string result;
+    result.reserve(u.size());
+
+    for (size_t i = 0; i < u.size(); ++i) {
+        uint16_t code_unit = u[i];
+        if (code_unit >= 0xD800 && code_unit <= 0xDBFF && i + 1 < u.size()) {
+            uint16_t low_surrogate = u[i + 1];
+            if (low_surrogate >= 0xDC00 && low_surrogate <= 0xDFFF) {
+                int code_point = ((code_unit - 0xD800) << 10) + (low_surrogate - 0xDC00) + 0x10000;
+                i++;
+                result += static_cast<char>(0xF0 | ((code_point >> 18) & 0x07));
+                result += static_cast<char>(0x80 | ((code_point >> 12) & 0x3F));
+                result += static_cast<char>(0x80 | ((code_point >> 6) & 0x3F));
+                result += static_cast<char>(0x80 | (code_point & 0x3F));
+            }
+        } else {
+            if (code_unit <= 0x7F) {
+                result += static_cast<char>(code_unit);
+            } else if (code_unit <= 0x7FF) {
+                result += static_cast<char>(0xC0 | ((code_unit >> 6) & 0x1F));
+                result += static_cast<char>(0x80 | (code_unit & 0x3F));
+            } else {
+                result += static_cast<char>(0xE0 | ((code_unit >> 12) & 0x0F));
+                result += static_cast<char>(0x80 | ((code_unit >> 6) & 0x3F));
+                result += static_cast<char>(0x80 | (code_unit & 0x3F));
+            }
+        }
+    }
+
+    return result;
 }
+
 } // namespace peparse
